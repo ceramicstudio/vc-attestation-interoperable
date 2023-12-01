@@ -4,95 +4,157 @@ import Nav from "../components/Navbar";
 import styles from "./index.module.css";
 import type { NextPage } from "next";
 import { useEffect, useState } from "react";
-import * as LitJsSdk from "@lit-protocol/lit-node-client";
-import { ILitNodeClient } from "@lit-protocol/types";
-import { WagmiConfig, useAccount } from "wagmi";
+import { useAccount } from "wagmi";
 import { GraphiQL } from "graphiql";
 import { definition } from "../__generated__/definition.js";
 import { ComposeClient } from "@composedb/client";
 import "graphiql/graphiql.min.css";
 
 const Home: NextPage = () => {
-  const [lit, setLit] = useState<ILitNodeClient>();
-  const { isDisconnected } = useAccount();
+  const [loggedIn, setLoggedIn] = useState(false);
+  const { address, isDisconnected } = useAccount();
 
-  const handleLogin = async () => {
-    const thisLit = startLitClient(window);
-    setLit(thisLit);
-  };
 
   const verifiableCredentialQuery = 
 `
 query VerifiableCredentialsAll {
-    verifiableCredentialIndex(first: 10){
-        edges{
-          node{
-            controller{
+  verifiableCredentialIndex(first: 10) {
+    edges {
+      node {
+        controller {
+          id
+        }
+        issuer {
+          id
+        }
+        context
+        type
+        credentialSchema {
+          id
+          type
+        }
+        issuanceDate
+        ... on AccountTrustCredential712 {
+          credentialSubject {
+            id {
               id
             }
-            issuer{
-              id
-            }
-            context
-            type
-            credentialSchema{
-              id
+            trustworthiness {
               type
+              level
+              scope
+              reason
             }
-            issuanceDate
-            ...on VCEIP712Proof{
-              proof{
-                verificationMethod
-                created
-                proofPurpose
-                type
-                proofValue
-                eip712{
-                  domain{
-                    chainId
-                    name
-                    version
-                  }
-                  types{
-                    EIP712Domain{
-                      name
-                      type
-                    }
-                    CredentialSchema{
-                      name
-                      type
-                    }
-                    CredentialSubject{
-                      name
-                      type
-                    }
-                    Proof{
-                      name
-                      type
-                    }
-                    VerifiableCredential{
-                      name
-                      type
-                    }
-                  }
-                  primaryType
+          }
+          proof {
+            verificationMethod
+            created
+            proofPurpose
+            type
+            proofValue
+            eip712 {
+              domain {
+                chainId
+                name
+                version
+              }
+              types {
+                EIP712Domain {
+                  name
+                  type
+                }
+                CredentialSchema {
+                  name
+                  type
+                }
+                CredentialSubject {
+                  name
+                  type
+                }
+                Proof {
+                  name
+                  type
+                }
+                VerifiableCredential {
+                  name
+                  type
                 }
               }
-            }
-            ...on VCJWTProof{
-              proof{
-                type
-                jwt
-              }
+              primaryType
             }
           }
         }
       }
-  }`
+    }
+  }
+}
+`;
+
+const verifiableCredentialQuery1 = 
+`
+query AccountTrustEIP712 {
+  accountTrustCredential712Index(last: 1) {
+    edges {
+      node {
+        credentialSubject {
+          id {
+            id
+          }
+          trustworthiness {
+            type
+            level
+            scope
+            reason
+          }
+        }
+        issuanceDate
+        proof {
+          verificationMethod
+          created
+          proofPurpose
+          type
+          proofValue
+          eip712 {
+            domain {
+              chainId
+              name
+              version
+            }
+            types {
+              EIP712Domain {
+                name
+                type
+              }
+              CredentialSchema {
+                name
+                type
+              }
+              CredentialSubject {
+                name
+                type
+              }
+              Proof {
+                name
+                type
+              }
+              VerifiableCredential {
+                name
+                type
+              }
+            }
+            primaryType
+          }
+        }
+      }
+    }
+  }
+}
+`;
 
   const Queries = {
     values: [
-      {title: `First 10 Verifiable Credentials`, query: verifiableCredentialQuery},
+      {query: verifiableCredentialQuery},
+      {query: verifiableCredentialQuery1},
     ]
   }
 
@@ -110,19 +172,11 @@ query VerifiableCredentialsAll {
     }
   };
 
-  const startLitClient = (window: Window): ILitNodeClient => {
-    // connect to lit
-    console.log("Starting Lit Client...");
-    const client = new LitJsSdk.LitNodeClient({
-      url: window.location.origin,
-    });
-    client.connect();
-    return client as ILitNodeClient;
-  };
-
   useEffect(() => {
-    handleLogin();
-  }, []);
+    if (address) {
+      setLoggedIn(true);
+    }
+  }, [address]);
 
   return (
     <>
@@ -134,7 +188,7 @@ query VerifiableCredentialsAll {
       </Head>
       {!isDisconnected ? (
         <main className={styles.main}>
-          {lit && (
+          {loggedIn && (
             <div style={{ height: "60rem", width: "90%", margin: "auto" }}>
                 {/* @ts-ignore */}
               <GraphiQL fetcher={fetcher} storage={null} defaultTabs={Queries.values}/>

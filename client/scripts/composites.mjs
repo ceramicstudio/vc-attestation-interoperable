@@ -22,13 +22,13 @@ export const writeComposite = async (spinner) => {
   await authenticate();
   spinner.info("writing composite to Ceramic");
 
-  const verifiableCredentialComposite = await createComposite(
+  const verifiableClaimsComposite = await createComposite(
     //@ts-ignore
     ceramic,
-    "./composites/00-verifiableCredential.graphql"
+    "./composites/00-verifiableClaims.graphql"
   );
 
-  await writeEncodedComposite(verifiableCredentialComposite, "./src/__generated__/definition.json");
+  await writeEncodedComposite(verifiableClaimsComposite, "./src/__generated__/definition.json");
   spinner.info("creating composite for runtime usage");
   await writeEncodedCompositeRuntime(
     //@ts-ignore

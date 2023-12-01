@@ -34,29 +34,36 @@ export default async function createCredential(
     });
     await staticDid.authenticate();
     ceramic.did = staticDid;
-    composeClient.setDID(staticDid as any);
+    // @ts-expect-error: Ignore type error
+    composeClient.setDID(staticDid);
     return staticDid;
   };
 
   try {
     if (uniqueKey) {
       await authenticateDID(uniqueKey);
+      console.log("toJson.credentialSubject.isTrusted");
       const data: any = await composeClient.executeQuery(`
       mutation {
-        createVerifiableCredentialJWT(input: {
+        createAccountTrustCredentialJWT(input: {
           content: {
-              context: ${JSON.stringify(toJson["@context"]).replace(/"([^"]+)":/g, "$1:")}
+              context: ${JSON.stringify(toJson["@context"]).replace(
+                /"([^"]+)":/g,
+                "$1:"
+              )}
               issuer: {
-                  id: "${toJson.issuer.id}"
-                }
+                id: "${toJson.issuer.id}"
+              }
+              recipient: "${toJson.credentialSubject.id}"  
+              trusted: ${toJson.credentialSubject.isTrusted}
               type: ${JSON.stringify(toJson.type).replace(/"([^"]+)":/g, "$1:")}
               credentialSchema: ${JSON.stringify(
                 toJson.credentialSchema
               ).replace(/"([^"]+)":/g, "$1:")}
               issuanceDate: "${toJson.issuanceDate}"
-              credentialSubject: ${JSON.stringify(
-                toJson.credentialSubject
-              ).replace(/"([^"]+)":/g, "$1:")}
+              credentialSubject: ${JSON.stringify(toJson.credentialSubject)
+                .replace(/"([^"]+)":/g, "$1:")
+                .replace("isTrusted", "trusted")}
                 proof: {
                   type: "${toJson.proof.type}"
                   jwt: "${toJson.proof.jwt}"
@@ -77,7 +84,7 @@ export default async function createCredential(
               id {
                 id
               }
-              isTrusted
+              trusted
             }
             proof{
               type

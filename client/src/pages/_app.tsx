@@ -3,7 +3,7 @@ import {ComposeDB} from "../fragments";
 import type { AppProps } from 'next/app'
 import { WagmiConfig } from 'wagmi'
 import { mainnet } from 'wagmi/chains'
-import "../styles/globals.css";
+import "../../styles/styles.css";
 
 const PROJECT_ID = '86e78deb6cf634c706f45426dd186bf7'
 

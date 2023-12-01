@@ -2,38 +2,20 @@ import Head from "next/head";
 import Nav from "../components/Navbar";
 import styles from "./index.module.css";
 import Credential from "../components/VC712";
+import Attest from "../components/ind";
 import type { NextPage } from "next";
 import { useEffect, useState } from "react";
-import * as LitJsSdk from "@lit-protocol/lit-node-client";
-import { ILitNodeClient } from "@lit-protocol/types";
-import { WagmiConfig, useAccount } from "wagmi";
-import { useComposeDB } from "../fragments";
+import {  useAccount } from "wagmi";
 
 const Home: NextPage = () => {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [lit, setLit] = useState<ILitNodeClient>();
-  // const [address, setAddress] = useState<string>("");
-  const { address, isConnecting, isDisconnected } = useAccount();
-  const { isAuthenticated } = useComposeDB();
-
-  const handleLogin = async () => {
-    const thisLit = startLitClient(window);
-    setLit(thisLit);
-  };
-
-  const startLitClient = (window: Window): ILitNodeClient => {
-    // connect to lit
-    console.log("Starting Lit Client...");
-    const client = new LitJsSdk.LitNodeClient({
-      url: window.location.origin,
-    });
-    client.connect();
-    return client as ILitNodeClient;
-  };
+  const { address, isDisconnected } = useAccount();
 
   useEffect(() => {
-    handleLogin();
-  }, []);
+    if (address) {
+      setLoggedIn(true);
+    }
+  }, [address]);
 
   return (
     <>
@@ -43,12 +25,12 @@ const Home: NextPage = () => {
         <meta name="description" content="" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      {!isDisconnected ? (
-        <main className={styles.main}>
-        <Credential />
+      {loggedIn ? (
+        <main className="bg-gray">
+          <Attest />
         </main>
       ) : (
-        <main className={styles.main}></main>
+        <main className="bg-gray"></main>
       )}
     </>
   );

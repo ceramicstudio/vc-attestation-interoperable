@@ -1,13 +1,13 @@
-# Verifiable Credentials on ComposeDB with Veramo
+# Verifiable Credentials and EAS Attestations on Ceramic with ComposeDB
 
 There are corresponding README documents in each of the child folders within this repository. You can follow the instructions on those documents, which must happen in the following order:
 
 1. express-veramo
 2. client
 
-## Generate Verifiable Credentials (in both EIP712 and JWT format) with Veramo
+## Generate Verifiable Credentials (in both EIP712 and JWT format) and EAS Attestations
 
-The express-veramo directory exposes several API paths for creating and verifying Verifiable Credentials using Veramo.
+The express-veramo directory exposes several API paths for creating and Verifiable Credentials and EAS Attestations. 
 
 ## Save and Query Verifiable Credentials on ComposeDB (Ceramic Network)
 

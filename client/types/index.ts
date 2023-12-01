@@ -19,3 +19,10 @@ export interface Message extends Post {
   sentAt: Date;
   isChatOwner?: boolean;
 }
+
+export interface TrustType {
+  type: string;
+  scope: string;
+  level: string;
+  reason?: string[];
+};

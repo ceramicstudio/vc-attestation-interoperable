@@ -3,6 +3,7 @@ import cors from "cors";
 import { verify } from "./src/verify-credential-712.js";
 import { verifyJWT } from "./src/verify-credential-jws.js";
 import { createCredential } from "./src/create-credential-712.js";
+import { createAttestation } from "./src/eas/create-attestation.js";
 import { createjwt } from "./src/create-credential-jws.js";
 import { listIdentifiers } from "./src/list-identifiers.js";
 import bodyParser from "body-parser";
@@ -43,6 +44,13 @@ app.post("/create", async (req, res) => {
   const vc = await createCredential(id);
   console.log(vc);
   res.json(vc);
+});
+
+app.post("/create-attestation", async (req, res) => {
+  const { address } = req.body;
+  const attestation = await createAttestation(address);
+  console.log(attestation);
+  res.json(attestation);
 });
 
 app.post("/create-jws", async (req, res) => {
