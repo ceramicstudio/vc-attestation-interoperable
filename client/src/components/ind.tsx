@@ -5,7 +5,17 @@ import Link from "next/link";
 import { ComposeClient } from "@composedb/client";
 import { RuntimeCompositeDefinition } from "@composedb/types";
 import { definition } from "../__generated__/definition.js";
+import { ICreateVerifiableCredentialEIP712Args } from "@veramo/credential-eip712";
+import { Web3KeyManagementSystem } from "@veramo/kms-web3";
+import { getEthTypesFromInputDoc } from "eip-712-types-generation";
+import { CredentialPayload } from "@veramo/core";
+import {
+  extractIssuer,
+  processEntryToArray,
+  MANDATORY_CREDENTIAL_CONTEXT,
+} from "@veramo/utils";
 import "graphiql/graphiql.min.css";
+import { ethers } from "ethers";
 
 enum ClaimTypes {
   verifiableCredential = "verifiableCredential",
@@ -13,20 +23,19 @@ enum ClaimTypes {
 }
 
 type Queries = {
-  values: [
-    {query: string},
-    {query: string},
-  ]
-}
+  values: [{ query: string }, { query: string }];
+};
 
 export default function Attest() {
   const [attesting, setAttesting] = useState(false);
   const [claim, setClaim] = useState<ClaimTypes>(ClaimTypes.attestation);
   const [signature, setSignature] = useState<"EIP712" | "JWT">("EIP712");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [destination, setDestination] = useState<string>("");
   const [queries, setQueries] = useState<Queries>({
     values: [
-      { query: `query VerifiableCredentials{
+      {
+        query: `query VerifiableCredentials{
         verifiableClaimIndex(last: 1){
           edges{
             node{
@@ -51,8 +60,10 @@ export default function Attest() {
             }
           }
         }
-      }` },
-      { query: `query Attestations{
+      }`,
+      },
+      {
+        query: `query Attestations{
         verifiableClaimIndex(last: 1){
           edges{
             node{
@@ -71,8 +82,9 @@ export default function Attest() {
             }
           }
         }
-      }` } // Add an empty query object to fix the type error
-    ]
+      }`,
+      }, // Add an empty query object to fix the type error
+    ],
   });
   const { address, isDisconnected } = useAccount();
 
@@ -88,6 +100,80 @@ export default function Attest() {
     if (data && data.data && !data.data.__schema) {
       return data.data;
     }
+  };
+
+  const createNew = () => {
+    const id = localStorage.getItem("did");
+    if (!id) return;
+
+    const cred = {
+      issuer: id,
+      "@context": [
+        "https://www.w3.org/2018/credentials/v1",
+        "https://beta.api.schemas.serto.id/v1/public/trusted-reviewer/1.0/ld-context.json",
+      ],
+      type: ["VerifiableCredential", "TrustedReviewer"],
+      credentialSchema: {
+        id: "https://beta.api.schemas.serto.id/v1/public/trusted-reviewer/1.0/json-schema.json",
+        type: "JsonSchemaValidator2018",
+      },
+      credentialSubject: {
+        isTrusted: true,
+        id: "did:pkh:eip155:1:0x514e3b94f0287caf77009039b72c321ef5f016e6",
+      },
+    };
+    const credentialContext = processEntryToArray(
+      cred?.["@context"],
+      MANDATORY_CREDENTIAL_CONTEXT
+    );
+    const credentialType = processEntryToArray(
+      cred?.type,
+      "VerifiableCredential"
+    );
+    //@ts-ignore
+    const issuer = extractIssuer(cred, { removeParameters: true });
+    let chainId = 1;
+    let issuanceDate = new Date().toISOString();
+
+    const credFinal: CredentialPayload = {
+      ...cred,
+      "@context": credentialContext,
+      type: credentialType,
+      issuanceDate,
+      proof: {
+        verificationMethod: localStorage.getItem("did"),
+        created: issuanceDate,
+        proofPurpose: "assertionMethod",
+        type: "EthereumEip712Signature2021",
+      },
+    };
+    const message = credFinal;
+    const domain = {
+      chainId,
+      name: "VerifiableCredential",
+      version: "1",
+    };
+    const primaryType = "VerifiableCredential";
+    const allTypes = getEthTypesFromInputDoc(credFinal, primaryType);
+    const types = { ...allTypes };
+    const data = JSON.stringify({ domain, types, message, primaryType });
+    //@ts-ignore
+
+    const sign = window.ethereum
+      .request({
+        method: "eth_signTypedData_v4",
+        params: [address, data],
+        from: address,
+      })
+      .then((signature: any) => {
+        credFinal["proof"]["proofValue"] = signature;
+        credFinal["proof"]["eip712"] = {
+          domain,
+          types: allTypes,
+          primaryType,
+        };
+        console.log(credFinal);
+      });
   };
 
   const createCredential = async () => {
@@ -164,7 +250,7 @@ export default function Attest() {
       }),
     });
 
-    console.log(attest)
+    console.log(attest);
 
     const toJsonCredential = await attest.json();
 
@@ -205,6 +291,18 @@ export default function Attest() {
         <div className="GradientBar" />
         <div className="WhiteBox">
           <>
+          <div className="subTitle"> I trust: </div>
+          <div className="InputContainer">
+          <input
+            className="InputBlock"
+            autoCorrect={"off"}
+            autoComplete={"off"}
+            autoCapitalize={"off"}
+            placeholder={"Address"}
+            value={destination}
+            onChange={(e) => setDestination(e.target.value.toLowerCase())}
+          />
+        </div>
             <div>Select claim format</div>
             <form className="px-4 py-3 m-3">
               <select
@@ -244,7 +342,7 @@ export default function Attest() {
           <button className="MetButton" onClick={createClaim}>
             {attesting ? "Creating Claim..." : "Generate Claim"}
           </button>
-          
+
           {address && (
             <>
               <div className="SubText"> </div>
@@ -252,16 +350,22 @@ export default function Attest() {
                 {" "}
                 <Link href="/connections">Connections</Link>
               </div>
+              <button onClick={createNew}>create new</button>
             </>
           )}
         </div>
       </div>
       {loggedIn && (
-            <div style={{ height: "60rem", width: "90%", margin: "auto" }}>
-                {/* @ts-ignore */}
-              <GraphiQL fetcher={fetcher} storage={null} defaultTabs={queries.values}/>
-            </div>
-          )}
+        <div style={{ height: "60rem", width: "90%", margin: "auto" }}>
+          {/* @ts-ignore */}
+          <GraphiQL
+            fetcher={fetcher}
+            // @ts-ignore
+            storage={null}
+            defaultTabs={queries.values}
+          />
+        </div>
+      )}
     </div>
   );
 }
