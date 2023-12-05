@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { GraphiQL } from "graphiql";
-import Link from "next/link";
 import { ComposeClient } from "@composedb/client";
 import { RuntimeCompositeDefinition } from "@composedb/types";
 import { definition } from "../__generated__/definition.js";
-import { ICreateVerifiableCredentialEIP712Args } from "@veramo/credential-eip712";
-import { Web3KeyManagementSystem } from "@veramo/kms-web3";
 import { getEthTypesFromInputDoc } from "eip-712-types-generation";
 import { CredentialPayload } from "@veramo/core";
+import { EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
+import { ethers } from "ethers";
 import {
   extractIssuer,
   processEntryToArray,
   MANDATORY_CREDENTIAL_CONTEXT,
 } from "@veramo/utils";
 import "graphiql/graphiql.min.css";
-import { ethers } from "ethers";
+import { useComposeDB } from "../fragments/index";
+import { CUSTOM_SCHEMAS, activeChainConfig } from "utils/utils";
 
 enum ClaimTypes {
   verifiableCredential = "verifiableCredential",
@@ -26,12 +26,14 @@ type Queries = {
   values: [{ query: string }, { query: string }];
 };
 
-export default function Attest() {
+export default function Create() {
+  const { compose } = useComposeDB();
+  const { address, isDisconnected } = useAccount();
   const [attesting, setAttesting] = useState(false);
   const [claim, setClaim] = useState<ClaimTypes>(ClaimTypes.attestation);
-  const [signature, setSignature] = useState<"EIP712" | "JWT">("EIP712");
   const [loggedIn, setLoggedIn] = useState(false);
   const [destination, setDestination] = useState<string>("");
+ 
   const [queries, setQueries] = useState<Queries>({
     values: [
       {
@@ -86,7 +88,7 @@ export default function Attest() {
       }, // Add an empty query object to fix the type error
     ],
   });
-  const { address, isDisconnected } = useAccount();
+
 
   const fetcher = async (graphQLParams: Record<string, any>) => {
     const composeClient = new ComposeClient({
@@ -102,7 +104,167 @@ export default function Attest() {
     }
   };
 
-  const createNew = () => {
+  const saveCredential = async (credential: any) => {
+    const data: any = await compose.executeQuery(`
+      mutation {
+        createAccountTrustCredential712(input: {
+          content: {
+              context: ${JSON.stringify(credential["@context"]).replace(
+                /"([^"]+)":/g,
+                "$1:"
+              )}
+              issuer: {
+                id: "${credential.issuer.id}"
+              }
+              recipient: "${credential.credentialSubject.id}"  
+              trusted: ${credential.credentialSubject.isTrusted}
+              type: ${JSON.stringify(credential.type).replace(
+                /"([^"]+)":/g,
+                "$1:"
+              )}
+              credentialSchema: ${JSON.stringify(
+                credential.credentialSchema
+              ).replace(/"([^"]+)":/g, "$1:")}
+              issuanceDate: "${credential.issuanceDate}"
+              credentialSubject: ${JSON.stringify(credential.credentialSubject)
+                .replace(/"([^"]+)":/g, "$1:")
+                .replace("isTrusted", "trusted")}
+                proof: {
+                  proofPurpose: "${credential.proof.proofPurpose}"
+                  type: "${credential.proof.type}"
+                  created: "${credential.proof.created}"
+                  verificationMethod: "${credential.proof.verificationMethod}"
+                  proofValue: "${credential.proof.proofValue}"
+                  eip712: {
+                    domain: ${JSON.stringify(
+                      credential.proof.eip712.domain
+                    ).replace(/"([^"]+)":/g, "$1:")}
+                    types: ${JSON.stringify(
+                      credential.proof.eip712.types
+                    ).replace(/"([^"]+)":/g, "$1:")}
+                    primaryType: "${credential.proof.eip712.primaryType}"
+                  }
+                }
+            }
+        }) 
+        {
+          document {
+            id
+            issuer {
+              id
+            }
+            issuanceDate
+            type
+            context
+            credentialSubject{
+              id {
+                id
+              }
+              trusted
+            }
+            proof{
+              type
+              proofPurpose
+              verificationMethod
+              proofValue
+              created
+              eip712{
+                domain{
+                  name
+                  version
+                  chainId
+                }
+                types {
+                  EIP712Domain {
+                    name
+                    type
+                  }
+                  CredentialSchema {
+                    name
+                    type
+                  }
+                  CredentialSubject {
+                    name
+                    type
+                  }
+                  Proof {
+                    name
+                    type
+                  }
+                  VerifiableCredential {
+                    name
+                    type
+                  }
+                }
+                primaryType
+              }
+            }
+          }
+        }
+      }
+    `);
+    console.log(data);
+  };
+
+  const saveAttestation = async (attestation: any) => {
+    const data: any = await compose.executeQuery(`
+      mutation {
+        createAccountAttestation(input: {
+          content: {
+            uid: "${attestation.uid}"
+            schema: "${attestation.message.schema}"
+            attester: "${"did:pkh:eip155:1:" + attestation.account}"
+            verifyingContract: "${attestation.domain.verifyingContract}"
+            easVersion: "${attestation.domain.version}"
+            version: ${attestation.message.version}
+            chainId: ${attestation.domain.chainId}
+            trusted: ${true}
+            r: "${attestation.signature.r}"
+            s: "${attestation.signature.s}"
+            v: ${attestation.signature.v}
+            types: ${JSON.stringify(attestation.types.Attest)
+              .replaceAll('"name"', "name")
+              .replaceAll('"type"', "type")}
+            recipient: "${"did:pkh:eip155:1:" + attestation.message.recipient}"
+            refUID: "${attestation.message.refUID}"
+            data: "${attestation.message.data}"
+            time: ${attestation.message.time}
+          }
+        }) 
+        {
+          document {
+            id
+            uid
+            schema
+            attester {
+              id
+            }
+            verifyingContract 
+            easVersion
+            trusted
+            version 
+            chainId 
+            types{
+              name
+              type
+            }
+            r
+            s
+            v
+            recipient {
+              id
+            }
+            refUID
+            data
+            time
+          }
+        }
+      }
+    `);
+    console.log(data)
+  };
+
+  const createCredential = () => {
     const id = localStorage.getItem("did");
     if (!id) return;
 
@@ -173,88 +335,48 @@ export default function Attest() {
           primaryType,
         };
         console.log(credFinal);
+        saveCredential(credFinal);
       });
   };
 
-  const createCredential = async () => {
-    const response = await fetch(
-      signature === "EIP712"
-        ? `http://localhost:8080/create`
-        : `http://localhost:8080/create-jws`,
-      {
-        method: "POST",
-        mode: "cors",
-        cache: "no-cache",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        redirect: "follow",
-        referrerPolicy: "no-referrer",
-        body: JSON.stringify({
-          id: localStorage.getItem("did"),
-        }),
-      }
-    );
-    const toJson = await response.json();
-    const credential = await fetch(
-      signature === "EIP712" ? `api/create` : `api/create-jwt`,
-      {
-        method: "POST",
-        mode: "cors",
-        cache: "no-cache",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        redirect: "follow",
-        referrerPolicy: "no-referrer",
-        body: JSON.stringify({
-          toJson,
-        }),
-      }
-    );
-
-    const toJsonCredential = await credential.json();
-
-    console.log(toJsonCredential);
-    return toJson;
-  };
-
   const createAttestation = async () => {
-    const response = await fetch("http://localhost:8080/create-attestation", {
-      method: "POST",
-      mode: "cors",
-      cache: "no-cache",
-      headers: {
-        "Content-Type": "application/json",
+    const eas = new EAS(activeChainConfig?.contractAddress ?? "");
+    const provider = new ethers.providers.Web3Provider(
+      window.ethereum as unknown as ethers.providers.ExternalProvider
+    );
+    const signer = provider.getSigner();
+    eas.connect(signer);
+    const offchain = await eas.getOffchain();
+    const schemaEncoder = new SchemaEncoder("bool Human");
+    const encoded = schemaEncoder.encodeData([
+      { name: "Human", type: "bool", value: true },
+    ]);
+    const time = Math.floor(Date.now() / 1000);
+    const offchainAttestation = await offchain.signOffchainAttestation(
+      {
+        recipient: destination.toLowerCase(),
+        // Unix timestamp of when attestation expires. (0 for no expiration)
+        expirationTime: 0,
+        // Unix timestamp of current time
+        time,
+        revocable: true,
+        version: 1,
+        nonce: 0,
+        schema: CUSTOM_SCHEMAS.TRUST_SCHEMA,
+        refUID:
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+        data: encoded,
       },
-      redirect: "follow",
-      referrerPolicy: "no-referrer",
-      body: JSON.stringify({
-        address,
-      }),
-    });
-    const toJson = await response.json();
-    console.log(toJson);
+      signer
+    );
 
-    const attest = await fetch("/api/create-attest", {
-      method: "POST",
-      mode: "cors",
-      cache: "no-cache",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      redirect: "follow",
-      referrerPolicy: "no-referrer",
-      body: JSON.stringify({
-        toJson,
-      }),
-    });
-
-    console.log(attest);
-
-    const toJsonCredential = await attest.json();
-
-    console.log(toJsonCredential);
+    const userAddress = await signer.getAddress();
+    const attestation = {
+      ...offchainAttestation,
+      account: userAddress.toLowerCase(),
+    };
+    console.log(attestation);
+    await saveAttestation(attestation);
   };
 
   const createClaim = async () => {
@@ -291,18 +413,18 @@ export default function Attest() {
         <div className="GradientBar" />
         <div className="WhiteBox">
           <>
-          <div className="subTitle"> I trust: </div>
-          <div className="InputContainer">
-          <input
-            className="InputBlock"
-            autoCorrect={"off"}
-            autoComplete={"off"}
-            autoCapitalize={"off"}
-            placeholder={"Address"}
-            value={destination}
-            onChange={(e) => setDestination(e.target.value.toLowerCase())}
-          />
-        </div>
+            <div className="subTitle"> I trust: </div>
+            <div className="InputContainer">
+              <input
+                className="InputBlock"
+                autoCorrect={"off"}
+                autoComplete={"off"}
+                autoCapitalize={"off"}
+                placeholder={"Address"}
+                value={destination}
+                onChange={(e) => setDestination(e.target.value.toLowerCase())}
+              />
+            </div>
             <div>Select claim format</div>
             <form className="px-4 py-3 m-3">
               <select
@@ -318,7 +440,7 @@ export default function Attest() {
                 </option>
               </select>
             </form>
-            {/* @ts-ignore */}
+            {/* @ts-ignore
             {claim === "verifiableCredential" && (
               <>
                 <div>Select a signature format</div>
@@ -337,22 +459,11 @@ export default function Attest() {
                   </select>
                 </form>
               </>
-            )}
+            )} */}
           </>
           <button className="MetButton" onClick={createClaim}>
             {attesting ? "Creating Claim..." : "Generate Claim"}
           </button>
-
-          {address && (
-            <>
-              <div className="SubText"> </div>
-              <div className="SubText">
-                {" "}
-                <Link href="/connections">Connections</Link>
-              </div>
-              <button onClick={createNew}>create new</button>
-            </>
-          )}
         </div>
       </div>
       {loggedIn && (
